@@ -399,7 +399,7 @@ function switchList(i){
 }
 
 // ── RENDER ALL ────────────────────────────────────────────────────────────────
-function renderAll(){ renderMeta(); renderProds(); renderCart(); }
+function renderAll(){ saveData(); renderMeta(); renderProds(); renderCart(); }
 
 function renderMeta(){
   for(let i=0;i<3;i++){
@@ -462,6 +462,7 @@ function chq(key, d){
     el.textContent = n;
     el.closest('tr').className = n ? 'in-cart' : '';
   }
+  saveData();
   renderCart();
 }
 
@@ -745,7 +746,28 @@ uz.addEventListener('drop',e=>{
   }
 });
 
+// ── LOCAL STORAGE ─────────────────────────────────────────────────────────────
+function saveData(){
+  try{
+    localStorage.setItem('pp_lists', JSON.stringify(lists));
+    localStorage.setItem('pp_names', JSON.stringify(names));
+    localStorage.setItem('pp_cart',  JSON.stringify(cart));
+  }catch(e){ console.warn('No se pudo guardar:', e); }
+}
+
+function loadData(){
+  try{
+    const l = localStorage.getItem('pp_lists');
+    const n = localStorage.getItem('pp_names');
+    const c = localStorage.getItem('pp_cart');
+    if(l) lists = JSON.parse(l);
+    if(n) names = JSON.parse(n);
+    if(c) cart  = JSON.parse(c);
+  }catch(e){ console.warn('No se pudo cargar:', e); }
+}
+
 // ── INIT ──────────────────────────────────────────────────────────────────────
+loadData();
 renderAll();
 </script>
 </body>
