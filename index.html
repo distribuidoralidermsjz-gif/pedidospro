@@ -98,6 +98,10 @@ tr.in-cart td{background:#121d14}
 .qb{width:26px;height:26px;border-radius:50%;border:1.5px solid var(--bor);background:var(--sur2);color:var(--txt);font-size:.95rem;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .12s;font-weight:700;line-height:1;flex-shrink:0}
 .qb:hover{background:var(--acc);color:#111;border-color:var(--acc)}
 .qv{min-width:26px;text-align:center;font-family:'Syne',sans-serif;font-weight:700;font-size:.85rem;color:var(--acc)}
+.qv-input{width:42px;text-align:center;font-family:'Syne',sans-serif;font-weight:700;font-size:.85rem;color:var(--acc);background:var(--sur2);border:1.5px solid var(--bor);border-radius:5px;padding:2px 4px;outline:none;}
+.qv-input:focus{border-color:var(--acc)}
+.qv-input::-webkit-inner-spin-button,.qv-input::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+.qv-input[type=number]{-moz-appearance:textfield}
 
 .empty{text-align:center;padding:50px 20px;color:var(--mut)}
 .empty .ei{font-size:2.2rem;margin-bottom:10px}
@@ -154,6 +158,15 @@ tr.in-cart td{background:#121d14}
 .toast{position:fixed;bottom:20px;right:20px;padding:10px 16px;border-radius:8px;font-family:'Syne',sans-serif;font-weight:700;font-size:.8rem;z-index:600;opacity:0;transform:translateY(8px);transition:all .23s;pointer-events:none;color:#fff}
 .toast.on{opacity:1;transform:translateY(0)}
 
+/* ── HISTORIAL ── */
+.hped{border:1.5px solid var(--bor);border-radius:8px;padding:10px 12px;margin-bottom:10px;background:var(--sur2)}
+.hped-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;flex-wrap:wrap;gap:6px}
+.hped-name{font-family:'Syne',sans-serif;font-weight:800;font-size:.9rem;color:var(--acc)}
+.hped-date{font-size:.68rem;color:var(--mut)}
+.hped-items{font-size:.75rem;color:var(--txt);margin-bottom:6px;line-height:1.6}
+.hped-total{font-family:'Syne',sans-serif;font-weight:800;color:var(--acc);font-size:.9rem;margin-bottom:8px}
+.hped-act{display:flex;gap:6px;flex-wrap:wrap}
+
 /* ── BANNER INSTALACIÓN PWA ── */
 #installBanner{
   display:none;position:fixed;bottom:0;left:0;right:0;
@@ -198,6 +211,7 @@ tr.in-cart td{background:#121d14}
   <div class="hright">
     <button class="btn b-out b-sm" onclick="openRename()">✏️ Renombrar</button>
     <button class="btn b-out b-sm" onclick="openAdd()">+ Producto</button>
+    <button class="btn b-out b-sm" onclick="openHistory()">📋 Historial <span id="hbadge" style="display:none;background:var(--acc2);color:#fff;border-radius:8px;padding:1px 6px;font-size:.62rem;margin-left:3px">0</span></button>
     <button class="btn b-acc b-sm" onclick="document.getElementById('pdfInput').click()">📄 Cargar PDF</button>
     <input type="file" id="pdfInput" accept=".pdf" onchange="loadPDF(this)">
   </div>
@@ -317,6 +331,19 @@ tr.in-cart td{background:#121d14}
   <button class="ib-close" id="installClose">✕</button>
 </div>
 
+<!-- Modal historial -->
+<div class="ov" id="histModal">
+  <div class="modal" style="max-width:600px">
+    <div class="mt">📋 Historial de pedidos</div>
+    <div class="ms" id="histSub"></div>
+    <div id="histContent"></div>
+    <div class="mact">
+      <button class="btn b-err b-sm" onclick="clearHistory()">🗑️ Borrar todo</button>
+      <button class="btn b-out" onclick="closeModal('histModal')">Cerrar</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -370,6 +397,7 @@ let active    = 0;
 let curCat    = 'Todos';
 let cart      = {};        // "li-id" → qty
 let pdfRows   = [];
+let history   = [];        // pedidos confirmados
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
 const fmt = n => '$\u202f' + Number(n).toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -444,7 +472,9 @@ function renderProds(){
       <td class="pp${hasP?'':' np'}">${hasP?fmt(p.price):'sin precio'}</td>
       <td>${hasP?`<div class="qc">
           <button class="qb" onclick="chq('${key}',-1)">−</button>
-          <span class="qv" id="qv_${key}">${qty}</span>
+          <input class="qv-input" id="qv_${key}" type="number" min="0" value="${qty}"
+            onchange="setq('${key}',this.value)"
+            onfocus="this.select()">
           <button class="qb" onclick="chq('${key}',1)">+</button>
         </div>`:'<span style="float:right;color:var(--mut)">—</span>'
       }</td>
@@ -459,7 +489,19 @@ function chq(key, d){
   if(n===0) delete cart[key]; else cart[key]=n;
   const el = $('qv_'+key);
   if(el){
-    el.textContent = n;
+    el.value = n;
+    el.closest('tr').className = n ? 'in-cart' : '';
+  }
+  saveData();
+  renderCart();
+}
+
+function setq(key, val){
+  const n = Math.max(0, parseInt(val)||0);
+  if(n===0) delete cart[key]; else cart[key]=n;
+  const el = $('qv_'+key);
+  if(el){
+    el.value = n;
     el.closest('tr').className = n ? 'in-cart' : '';
   }
   saveData();
@@ -515,12 +557,103 @@ function clearCart(){
 // ── CONFIRM ORDER ─────────────────────────────────────────────────────────────
 function confirmOrder(){
   if(!Object.keys(cart).length){ toast('El pedido está vacío','warn'); return; }
-  const name = $('cname').value.trim();
+  const name  = $('cname').value.trim();
+  const phone = $('cphone').value.trim();
+  const notes = $('cnotes').value.trim();
   if(!name){ $('cname').focus(); toast('Falta el nombre del cliente','warn'); return; }
-  toast(`✅ Pedido de ${name} confirmado`);
+  if(!confirm(`¿Confirmar y guardar el pedido de ${name}?`)) return;
+
+  // Armar resumen del pedido
+  let items=[], total=0;
+  for(let li=0;li<3;li++){
+    Object.entries(cart).filter(([k])=>k.startsWith(li+'-')).forEach(([k,qty])=>{
+      const pid  = k.split('-')[1];
+      const prod = lists[li].find(p=>p.id===pid);
+      if(prod){ const sub=prod.price*qty; total+=sub; items.push({name:prod.name,qty,price:prod.price,sub,lista:names[li]}); }
+    });
+  }
+
+  history.unshift({
+    id: Date.now(),
+    cliente: name,
+    telefono: phone,
+    notas: notes,
+    fecha: new Date().toLocaleString('es-AR'),
+    items,
+    total
+  });
+
   cart={};
   ['cname','cphone','cnotes'].forEach(id=>$(id).value='');
   renderAll();
+  updateHbadge();
+  toast(`✅ Pedido de ${name} guardado en historial`);
+}
+
+// ── HISTORIAL ─────────────────────────────────────────────────────────────────
+function updateHbadge(){
+  const b = $('hbadge');
+  b.textContent = history.length;
+  b.style.display = history.length ? 'inline' : 'none';
+}
+
+function openHistory(){
+  const hc = $('histContent');
+  $('histSub').textContent = history.length
+    ? `${history.length} pedido(s) del día`
+    : 'No hay pedidos confirmados todavía.';
+
+  if(!history.length){ hc.innerHTML=''; $('histModal').classList.add('on'); return; }
+
+  hc.innerHTML = history.map((p,i)=>{
+    const lineas = p.items.map(it=>
+      `${it.name} ×${it.qty} — ${fmt(it.sub)}`
+    ).join('<br>');
+    return `<div class="hped">
+      <div class="hped-top">
+        <span class="hped-name">👤 ${esc(p.cliente)}</span>
+        <span class="hped-date">${p.fecha}</span>
+      </div>
+      <div class="hped-items">${lineas}</div>
+      ${p.notas?`<div style="font-size:.73rem;color:var(--mut);margin-bottom:6px">📝 ${esc(p.notas)}</div>`:''}
+      <div class="hped-total">Total: ${fmt(p.total)}</div>
+      <div class="hped-act">
+        <button class="btn b-wa b-sm" onclick="waHistory(${i})">💬 WhatsApp</button>
+        <button class="btn b-err b-sm" onclick="delHistory(${i})">🗑️ Eliminar</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  $('histModal').classList.add('on');
+}
+
+function waHistory(i){
+  const p = history[i];
+  let msg = `🛒 *PEDIDO - ${p.cliente}*\n📅 ${p.fecha}\n\n`;
+  p.items.forEach(it=>{ msg+=`• ${it.name}  ×${it.qty}  ${fmt(it.sub)}\n`; });
+  if(p.notas) msg+=`\n📝 Notas: ${p.notas}\n`;
+  msg+=`\n*TOTAL: ${fmt(p.total)}*`;
+  const phone = p.telefono.replace(/\D/g,'');
+  const url = phone ? `https://wa.me/54${phone}?text=${encodeURIComponent(msg)}` : `https://wa.me/?text=${encodeURIComponent(msg)}`;
+  window.open(url,'_blank');
+}
+
+function delHistory(i){
+  if(!confirm('¿Eliminar este pedido del historial?')) return;
+  history.splice(i,1);
+  saveData();
+  updateHbadge();
+  openHistory();
+}
+
+function clearHistory(){
+  if(!history.length) return;
+  if(!confirm(`¿Borrar los ${history.length} pedidos del historial?`)) return;
+  history=[];
+  saveData();
+  updateHbadge();
+  closeModal('histModal');
+  toast('🗑️ Historial borrado');
 }
 
 // ── WHATSAPP ──────────────────────────────────────────────────────────────────
@@ -749,9 +882,10 @@ uz.addEventListener('drop',e=>{
 // ── LOCAL STORAGE ─────────────────────────────────────────────────────────────
 function saveData(){
   try{
-    localStorage.setItem('pp_lists', JSON.stringify(lists));
-    localStorage.setItem('pp_names', JSON.stringify(names));
-    localStorage.setItem('pp_cart',  JSON.stringify(cart));
+    localStorage.setItem('pp_lists',   JSON.stringify(lists));
+    localStorage.setItem('pp_names',   JSON.stringify(names));
+    localStorage.setItem('pp_cart',    JSON.stringify(cart));
+    localStorage.setItem('pp_history', JSON.stringify(history));
   }catch(e){ console.warn('No se pudo guardar:', e); }
 }
 
@@ -760,15 +894,18 @@ function loadData(){
     const l = localStorage.getItem('pp_lists');
     const n = localStorage.getItem('pp_names');
     const c = localStorage.getItem('pp_cart');
-    if(l) lists = JSON.parse(l);
-    if(n) names = JSON.parse(n);
-    if(c) cart  = JSON.parse(c);
+    const h = localStorage.getItem('pp_history');
+    if(l) lists   = JSON.parse(l);
+    if(n) names   = JSON.parse(n);
+    if(c) cart    = JSON.parse(c);
+    if(h) history = JSON.parse(h);
   }catch(e){ console.warn('No se pudo cargar:', e); }
 }
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
 loadData();
 renderAll();
+updateHbadge();
 </script>
 </body>
 </html>
