@@ -619,6 +619,7 @@ function openHistory(){
       <div class="hped-total">Total: ${fmt(p.total)}</div>
       <div class="hped-act">
         <button class="btn b-wa b-sm" onclick="waHistory(${i})">💬 WhatsApp</button>
+        <button class="btn b-out b-sm" onclick="editHistory(${i})">✏️ Editar</button>
         <button class="btn b-err b-sm" onclick="delHistory(${i})">🗑️ Eliminar</button>
       </div>
     </div>`;
@@ -638,7 +639,37 @@ function waHistory(i){
   window.open(url,'_blank');
 }
 
-function delHistory(i){
+function editHistory(i){
+  const p = history[i];
+
+  // Si hay un pedido en curso, avisar
+  if(Object.keys(cart).length){
+    if(!confirm('Hay un pedido en curso. ¿Descartarlo y cargar este para editar?')) return;
+  }
+
+  // Restaurar datos del cliente
+  $('cname').value  = p.cliente;
+  $('cphone').value = p.telefono || '';
+  $('cnotes').value = p.notas    || '';
+
+  // Restaurar productos al carrito
+  cart = {};
+  p.items.forEach(it=>{
+    // Buscar el producto en las listas por nombre
+    for(let li=0;li<3;li++){
+      const prod = lists[li].find(pr=>pr.name===it.name);
+      if(prod){ cart[li+'-'+prod.id] = it.qty; break; }
+    }
+  });
+
+  // Quitar del historial (se va a reconfirmar como nuevo)
+  history.splice(i,1);
+  saveData();
+  updateHbadge();
+  closeModal('histModal');
+  renderAll();
+  toast(`✏️ Pedido de ${p.cliente} cargado para editar`);
+}
   if(!confirm('¿Eliminar este pedido del historial?')) return;
   history.splice(i,1);
   saveData();
