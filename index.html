@@ -670,6 +670,8 @@ function editHistory(i){
   renderAll();
   toast(`✏️ Pedido de ${p.cliente} cargado para editar`);
 }
+
+function delHistory(i){
   if(!confirm('¿Eliminar este pedido del historial?')) return;
   history.splice(i,1);
   saveData();
